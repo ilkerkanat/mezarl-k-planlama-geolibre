@@ -1,5 +1,5 @@
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
-import type { Feature, FeatureCollection, MultiPolygon, Polygon, Position } from "geojson";
+import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson";
 
 export const CEMETERY_PLANNER_PLUGIN_ID = "cemetery-planner";
 const CEMETERY_BASEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
@@ -8,6 +8,8 @@ export const CEMETERY_LAYER_BOUNDARY = "Cemetery Boundary";
 export const CEMETERY_LAYER_ROADS = "Cemetery Roads";
 export const CEMETERY_LAYER_PLOTS = "Cemetery Plots";
 export const CEMETERY_LAYER_GRAVES = "Cemetery Graves";
+
+const PANEL_ID = "cemetery-info-panel";
 
 export type CemeteryTur = "normal" | "aile" | "katli";
 
@@ -44,13 +46,6 @@ const PLOT_PAYASI = 0.6;
 const PLOT_BOYUTU_M2: Record<string, number> = { aile: 40, cocuk: 20, normal: 30 };
 const MEZAR_KAPACITE: Record<CemeteryTur, number> = { normal: 1, aile: 15, katli: 1 };
 
-function ringsOf(feature: Feature<Polygon | MultiPolygon>): Array<Position[]> {
-  const geometry = feature.geometry;
-  if (!geometry) return [];
-  if (geometry.type === "Polygon") return geometry.coordinates;
-  return [];
-}
-
 function polygonArea(feature: Feature<Polygon | MultiPolygon>): number {
   const geometry = feature.geometry;
   if (!geometry) return 0;
@@ -66,16 +61,15 @@ function polygonArea(feature: Feature<Polygon | MultiPolygon>): number {
   return Math.abs(area);
 }
 
-function rectangleRing(m2: number): Position[] {
+function rectangleRing(m2: number): number[][] {
   const side = Math.sqrt(m2);
-  const ring: Position[] = [
+  return [
     [0, 0],
     [side, 0],
     [side, side],
     [0, side],
     [0, 0],
   ];
-  return ring;
 }
 
 export function generateCemeteryPlan(input: CemeteryPlanInput): CemeteryPlan {
@@ -93,7 +87,7 @@ export function generateCemeteryPlan(input: CemeteryPlanInput): CemeteryPlan {
     features: [
       {
         type: "Feature",
-        geometry: { type: "LineString", coordinates: ringsOf(boundary)[0] ?? [] },
+        geometry: { type: "LineString", coordinates: (boundary.geometry.type === "Polygon" ? boundary.geometry.coordinates[0] : []) as number[][] },
         properties: { id: "perimeter-1", tur: "perimeter", genislik: PERIMETER_ROAD_WIDTH_M },
       },
     ],
@@ -159,6 +153,89 @@ export function hesaplaIstatistikler(plan: CemeteryPlan): CemeteryPlanStats {
   return { normalMezar, aileMezar, katliMezar, toplamKisi, cesme, otopark, kapi };
 }
 
+// --- UI wiring ---
+
+let appRef: GeoLibreAppAPI | null = null;
+let panelContainer: HTMLElement | null = null;
+let statsEl: HTMLElement | null = null;
+let layerIds: string[] = [];
+
+function asFeatureCollection(feature: Feature): FeatureCollection {
+  return { type: "FeatureCollection", features: [feature] };
+}
+
+function renderStats(stats: CemeteryPlanStats): void {
+  if (!statsEl) return;
+  statsEl.innerHTML = "";
+  const rows: [string, number][] = [
+    ["Normal Mezar", stats.normalMezar],
+    ["Aile Mezarı", stats.aileMezar],
+    ["Katlı Mezar", stats.katliMezar],
+    ["Toplam Kişi", stats.toplamKisi],
+    ["Çeşme", stats.cesme],
+    ["Otopark", stats.otopark],
+    ["Kapı", stats.kapi],
+  ];
+  for (const [label, value] of rows) {
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.justifyContent = "space-between";
+    row.style.padding = "2px 0";
+    const l = document.createElement("span");
+    l.textContent = label;
+    const v = document.createElement("span");
+    v.textContent = String(value);
+    v.style.fontWeight = "bold";
+    row.appendChild(l);
+    row.appendChild(v);
+    statsEl.appendChild(row);
+  }
+}
+
+function uretPlan(): void {
+  if (!appRef) return;
+  const features = appRef.getDrawnFeatures?.() ?? [];
+  const boundary = features.find(
+    (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon",
+  ) as Feature<Polygon | MultiPolygon> | undefined;
+  if (!boundary) {
+    if (statsEl) statsEl.textContent = "Önce sınır çiz (draw)." ;
+    return;
+  }
+
+  // remove previous layers
+  for (const id of layerIds) appRef.removeLayer?.(id);
+  layerIds = [];
+
+  const plan = generateCemeteryPlan({ boundary, oranlar: { aile: 35, cocuk: 5, normal: 60 } });
+  layerIds.push(appRef.addGeoJsonLayer(CEMETERY_LAYER_BOUNDARY, asFeatureCollection(boundary)));
+  layerIds.push(appRef.addGeoJsonLayer(CEMETERY_LAYER_ROADS, plan.roads));
+  layerIds.push(appRef.addGeoJsonLayer(CEMETERY_LAYER_PLOTS, plan.plots));
+  layerIds.push(appRef.addGeoJsonLayer(CEMETERY_LAYER_GRAVES, plan.graves));
+
+  renderStats(hesaplaIstatistikler(plan));
+}
+
+const floatingPanelRegistration = {
+  id: PANEL_ID,
+  title: "Mezarlık Planı",
+  defaultWidth: 260,
+  render: (container: HTMLElement) => {
+    panelContainer = container;
+    container.innerHTML = "";
+    const btn = document.createElement("button");
+    btn.textContent = "Plan Üret";
+    btn.style.padding = "6px 12px";
+    btn.style.cursor = "pointer";
+    btn.addEventListener("click", uretPlan);
+    container.appendChild(btn);
+
+    statsEl = document.createElement("div");
+    statsEl.style.marginTop = "8px";
+    container.appendChild(statsEl);
+  },
+};
+
 export const cemeteryPlannerPlugin: GeoLibrePlugin = {
   id: CEMETERY_PLANNER_PLUGIN_ID,
   name: "Cemetery Planner",
@@ -166,9 +243,19 @@ export const cemeteryPlannerPlugin: GeoLibrePlugin = {
   activeByDefault: true,
   activate: (app: GeoLibreAppAPI) => {
     app.setBasemap(CEMETERY_BASEMAP_STYLE);
+    appRef = app;
+    const unregister = app.registerFloatingPanel?.(floatingPanelRegistration as any);
+    void unregister;
+    setTimeout(() => app.openFloatingPanel?.(PANEL_ID), 0);
     return true;
   },
-  deactivate: () => {
-    /* Basemap stays until the user changes it. */
+  deactivate: (app: GeoLibreAppAPI) => {
+    for (const id of layerIds) app.removeLayer?.(id);
+    layerIds = [];
+    app.closeFloatingPanel?.(PANEL_ID);
+    app.unregisterFloatingPanel?.(PANEL_ID);
+    appRef = null;
+    panelContainer = null;
+    statsEl = null;
   },
 };
