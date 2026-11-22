@@ -230,6 +230,8 @@ const BUILT_IN_PLUGINS: GeoLibrePlugin[] = [
   maplibreGeoEditorPlugin,
   maplibreAnnotationsPlugin,
   maplibreDimensionsPlugin,
+  cemeteryPlannerPlugin,
+  cemeteryPlannerPlugin,
   // The web service plugins (WEB_SERVICE_PLUGIN_IDS) are grouped into the
   // "Web Services" submenu, rendered where the first of them appears in this
   // order.
