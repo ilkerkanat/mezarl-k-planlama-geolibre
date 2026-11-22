@@ -164,6 +164,23 @@ function asFeatureCollection(feature: Feature): FeatureCollection {
   return { type: "FeatureCollection", features: [feature] };
 }
 
+function kmlToBoundary(text: string): Feature<Polygon> | null {
+  const coordMatch = text.match(/<coordinates>([\s\S]*?)<\/coordinates>/);
+  if (!coordMatch) return null;
+  const noktalar = coordMatch[1]
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((c) => c.split(","))
+    .filter((p) => p.length >= 2)
+    .map((p) => [parseFloat(p[0]), parseFloat(p[1])] as [number, number]);
+  if (noktalar.length < 3) return null;
+  if (noktalar[0][0] !== noktalar[noktalar.length - 1][0] || noktalar[0][1] !== noktalar[noktalar.length - 1][1]) {
+    noktalar.push([noktalar[0][0], noktalar[0][1]]);
+  }
+  return { type: "Feature", geometry: { type: "Polygon", coordinates: [noktalar] }, properties: {} };
+}
+
 function renderStats(stats: CemeteryPlanStats): void {
   if (!statsEl) return;
   statsEl.innerHTML = "";
@@ -192,14 +209,17 @@ function renderStats(stats: CemeteryPlanStats): void {
   }
 }
 
-function uretPlan(): void {
+function uretPlan(boundaryArg?: Feature<Polygon | MultiPolygon>): void {
   if (!appRef) return;
-  const features = appRef.getDrawnFeatures?.() ?? [];
-  const boundary = features.find(
-    (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon",
-  ) as Feature<Polygon | MultiPolygon> | undefined;
+  let boundary: Feature<Polygon | MultiPolygon> | undefined = boundaryArg;
   if (!boundary) {
-    if (statsEl) statsEl.textContent = "Önce sınır çiz (draw)." ;
+    const features = appRef.getDrawnFeatures?.() ?? [];
+    boundary = features.find(
+      (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon",
+    ) as Feature<Polygon | MultiPolygon> | undefined;
+  }
+  if (!boundary) {
+    if (statsEl) statsEl.textContent = "Önce sınır çiz veya KML yükle.";
     return;
   }
 
@@ -227,8 +247,27 @@ const floatingPanelRegistration = {
     btn.textContent = "Plan Üret";
     btn.style.padding = "6px 12px";
     btn.style.cursor = "pointer";
-    btn.addEventListener("click", uretPlan);
+    btn.addEventListener("click", () => uretPlan());
     container.appendChild(btn);
+
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = ".kml";
+    fileInput.style.display = "block";
+    fileInput.style.marginTop = "8px";
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      if (!file || !appRef) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = String(reader.result ?? "");
+        const boundary = kmlToBoundary(text);
+        if (boundary) uretPlan(boundary);
+        else if (statsEl) statsEl.textContent = "KML'den poligon okunamadı.";
+      };
+      reader.readAsText(file);
+    });
+    container.appendChild(fileInput);
 
     statsEl = document.createElement("div");
     statsEl.style.marginTop = "8px";
