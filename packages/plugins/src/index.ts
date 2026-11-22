@@ -119,7 +119,19 @@ export {
   type AnnotationMarkerOptions,
 } from "./plugins/annotation-marker";
 export { osmBasemapPlugin } from "./plugins/osm-basemap";
-export { cemeteryPlannerPlugin, CEMETERY_PLANNER_PLUGIN_ID } from "./plugins/cemetery";
+export {
+  cemeteryPlannerPlugin,
+  CEMETERY_PLANNER_PLUGIN_ID,
+  generateCemeteryPlan,
+  hesaplaIstatistikler,
+} from "./plugins/cemetery";
+export type {
+  CemeteryPlan,
+  CemeteryPlanInput,
+  CemeteryPlanStats,
+  CemeteryOranlar,
+  CemeteryTur,
+} from "./plugins/cemetery";
 export { cartoLightPlugin } from "./plugins/carto-light";
 export {
   maplibreBasemapControlPlugin,
