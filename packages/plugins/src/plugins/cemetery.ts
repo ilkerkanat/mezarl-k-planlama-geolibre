@@ -4,10 +4,10 @@ import type { Feature, FeatureCollection, MultiPolygon, Polygon } from "geojson"
 export const CEMETERY_PLANNER_PLUGIN_ID = "cemetery-planner";
 const CEMETERY_BASEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
-export const CEMETERY_LAYER_BOUNDARY = "Cemetery Boundary";
-export const CEMETERY_LAYER_ROADS = "Cemetery Roads";
-export const CEMETERY_LAYER_PLOTS = "Cemetery Plots";
-export const CEMETERY_LAYER_GRAVES = "Cemetery Graves";
+export const CEMETERY_LAYER_BOUNDARY = "Mezarlık Sınırı";
+export const CEMETERY_LAYER_ROADS = "Mezarlık Yolları";
+export const CEMETERY_LAYER_PLOTS = "Mezar Poligonları";
+export const CEMETERY_LAYER_GRAVES = "Mezarlar";
 
 const PANEL_ID = "cemetery-info-panel";
 
