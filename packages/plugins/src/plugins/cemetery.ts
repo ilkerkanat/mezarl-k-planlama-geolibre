@@ -159,6 +159,7 @@ let appRef: GeoLibreAppAPI | null = null;
 let panelContainer: HTMLElement | null = null;
 let statsEl: HTMLElement | null = null;
 let layerIds: string[] = [];
+let currentOranlar: CemeteryOranlar = { aile: 35, cocuk: 5, normal: 60 };
 
 function asFeatureCollection(feature: Feature): FeatureCollection {
   return { type: "FeatureCollection", features: [feature] };
@@ -227,7 +228,7 @@ function uretPlan(boundaryArg?: Feature<Polygon | MultiPolygon>): void {
   for (const id of layerIds) appRef.removeLayer?.(id);
   layerIds = [];
 
-  const plan = generateCemeteryPlan({ boundary, oranlar: { aile: 35, cocuk: 5, normal: 60 } });
+  const plan = generateCemeteryPlan({ boundary, oranlar: currentOranlar });
   layerIds.push(appRef.addGeoJsonLayer(CEMETERY_LAYER_BOUNDARY, asFeatureCollection(boundary)));
   layerIds.push(appRef.addGeoJsonLayer(CEMETERY_LAYER_ROADS, plan.roads));
   layerIds.push(appRef.addGeoJsonLayer(CEMETERY_LAYER_PLOTS, plan.plots));
@@ -249,6 +250,31 @@ const floatingPanelRegistration = {
     btn.style.cursor = "pointer";
     btn.addEventListener("click", () => uretPlan());
     container.appendChild(btn);
+
+    const oranDiv = document.createElement("div");
+    oranDiv.style.marginTop = "8px";
+    oranDiv.style.fontSize = "12px";
+    const oranLabel = document.createElement("div");
+    oranLabel.textContent = "Oranlar (aile/cocuk/normal %)";
+    oranDiv.appendChild(oranLabel);
+    const oranInputs: { key: keyof CemeteryOranlar; input: HTMLInputElement }[] = [];
+    for (const key of ["aile", "cocuk", "normal"] as (keyof CemeteryOranlar)[]) {
+      const wrap = document.createElement("label");
+      wrap.style.display = "inline-block";
+      wrap.style.marginRight = "6px";
+      const inp = document.createElement("input");
+      inp.type = "number";
+      inp.value = String(currentOranlar[key]);
+      inp.style.width = "48px";
+      inp.addEventListener("change", () => {
+        const v = parseFloat(inp.value);
+        if (!isNaN(v)) currentOranlar[key] = v;
+      });
+      wrap.appendChild(inp);
+      oranDiv.appendChild(wrap);
+      oranInputs.push({ key, input: inp });
+    }
+    container.appendChild(oranDiv);
 
     const fileInput = document.createElement("input");
     fileInput.type = "file";
